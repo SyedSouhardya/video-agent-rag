@@ -10,6 +10,7 @@ def download_youtube_audio(url: str) -> str:
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
+        "cookiefile": "cookies.txt",  # Bypasses the bot detection wall using your text file
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
