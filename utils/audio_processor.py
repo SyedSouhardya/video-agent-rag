@@ -11,6 +11,13 @@ def download_youtube_audio(url: str) -> str:
         "format": "bestaudio/best",
         "outtmpl": output_path,
         "cookiefile": "cookies.txt",  # Bypasses the bot detection wall using your text file
+        "quiet": True,
+        # Tricks YouTube into treating this request as an embedded link or smartphone traffic
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web_embedded", "ios"]
+            }
+        },
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -18,7 +25,6 @@ def download_youtube_audio(url: str) -> str:
                 "preferredquality": "192",
             }
         ],
-        "quiet": True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
