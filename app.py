@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import os
 from dotenv import load_dotenv
 from utils.audio_processor import process_input
 from core.transcriber import transcribe_all
@@ -13,7 +14,7 @@ load_dotenv()
 st.set_page_config(
     page_title="AI Video Assistant",
     page_icon="🎬",
-    layout="wide",
+    page_width="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -325,11 +326,18 @@ with st.sidebar:
     st.markdown('<div class="hero-sub">Meeting Intelligence</div>', unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
-    source = st.text_input("YouTube URL or File Path", placeholder="https://youtube.com/watch?v=... or /path/to/file.mp4")
+    st.markdown('<span class="badge badge-purple">Input Option</span>', unsafe_allow_html=True)
+    input_method = st.radio("Choose source type:", ["YouTube URL", "Upload Audio/Video File"])
+
+    source = None
+    uploaded_file = None
+
+    if input_method == "YouTube URL":
+        source = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
+    else:
+        uploaded_file = st.file_uploader("Upload local file", type=["mp3", "wav", "mp4", "m4a"])
 
     language = st.selectbox("Language", ["english", "hinglish"], index=0)
-
     run_btn = st.button("⚡  Analyse", use_container_width=True)
 
     if st.session_state.pipeline_done:
@@ -352,9 +360,16 @@ st.markdown("---")
 
 # ── Run Pipeline ────────────────────────────────────────────────────────────────
 if run_btn:
-    if not source.strip():
-        st.error("Please enter a YouTube URL or file path.")
-    else:
+    # Validation checks
+    is_valid = True
+    if input_method == "YouTube URL" and not (source and source.strip()):
+        st.error("Please enter a valid YouTube URL.")
+        is_valid = False
+    elif input_method == "Upload Audio/Video File" and uploaded_file is None:
+        st.error("Please choose a file to upload first.")
+        is_valid = False
+
+    if is_valid:
         st.session_state.pipeline_done = False
         st.session_state.result = None
         st.session_state.chat_history = []
@@ -370,8 +385,22 @@ if run_btn:
                 st.info("⚙️ Pipeline running — see sidebar for live status…")
 
             update_step("audio", "active")
-            chunks = process_input(source)
+            
+            # Handle File upload conversion vs URL processing paths
+            if input_method == "Upload Audio/Video File":
+                temp_filename = f"temp_{uploaded_file.name}"
+                with open(temp_filename, "wb") as f:
+                    f.write(uploaded_file.read())
+                processing_source = temp_filename
+            else:
+                processing_source = source.strip()
+
+            chunks = process_input(processing_source)
             update_step("audio", "done")
+
+            # Clean up local temporary upload files if generated
+            if input_method == "Upload Audio/Video File" and os.path.exists(temp_filename):
+                os.remove(temp_filename)
 
             update_step("transcript", "active")
             transcript = transcribe_all(chunks, language)
@@ -414,7 +443,16 @@ if run_btn:
             for k in ["audio","transcript","title","summary","extract","rag"]:
                 if st.session_state.pipeline_steps.get(k) == "active":
                     st.session_state.pipeline_steps[k] = "pending"
-            progress_placeholder.error(f"❌ Error: {e}")
+            
+            # Custom validation warning if datacenter block occurs
+            error_msg = str(e)
+            if "blocked" in error_msg.lower() or "bot" in error_msg.lower() or "sign in" in error_msg.lower():
+                progress_placeholder.error(
+                    "❌ YouTube completely blocked the Streamlit Cloud server IP. "
+                    "Please switch to 'Upload Audio/Video File' in the sidebar and drop your file directly!"
+                )
+            else:
+                progress_placeholder.error(f"❌ Error: {e}")
 
 # ── Results ──────────────────────────────────────────────────────────────────────
 if st.session_state.result:
@@ -470,9 +508,6 @@ if st.session_state.result:
     st.markdown("---")
 
     # ── RAG Chat ──────────────────────────────────────────────────────────────
-    st.markdown("---")
-
-    # ── RAG Chat ──────────────────────────────────────────────────────────────
     st.markdown('<div style="font-family:\'Syne\',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:1rem">💬 Chat with your Meeting</div>', unsafe_allow_html=True)
 
     # 1. ALWAYS render past history first
@@ -482,20 +517,16 @@ if st.session_state.result:
 
     # 2. Capture new input
     if user_input := st.chat_input("Ask anything about your meeting transcript..."):
-        # Append user message immediately to state history
         st.session_state.chat_history.append({"role": "user", "content": user_input.strip()})
         
-        # Display user message instantly to keep UX snappy
         with st.chat_message("user"):
             st.markdown(user_input)
             
-        # Generate and show assistant response within the same execution path
         with st.chat_message("assistant"):
             with st.spinner("Thinking…"):
                 answer = ask_question(r["rag_chain"], user_input.strip())
             st.markdown(answer)
             
-        # Save assistant message to history and trigger a single safe rerun
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         st.rerun()
 
