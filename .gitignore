@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+core/__pycache__/
+utils/__pycache__/
+downloaded_audio/
+vector_db/
+.env
