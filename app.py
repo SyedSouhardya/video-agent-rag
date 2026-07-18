@@ -11,10 +11,11 @@ from core.rag_engine import build_rag_chain, ask_question
 load_dotenv()
 
 # ─── Page Config ────────────────────────────────────────────────────────────────
+
 st.set_page_config(
     page_title="AI Video Assistant",
     page_icon="🎬",
-    page_width="wide",
+    layout="wide",  # <-- Changed from page_width to layout
     initial_sidebar_state="expanded",
 )
 
